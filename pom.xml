@@ -37,6 +37,12 @@
 			<version>${spark.version}</version>
 		</dependency>
 		<dependency>
+			<groupId>com.google.cloud.spark</groupId>
+			<artifactId>spark-bigquery-with-dependencies_${scala.binary.version}</artifactId>
+			<version>0.24.2</version>
+			<scope>provided</scope>
+		</dependency>
+		<dependency>
 			<groupId>com.github.scopt</groupId>
 			<artifactId>scopt_${scala.binary.version}</artifactId>
 			<version>3.7.1</version>
