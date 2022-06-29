@@ -10,7 +10,7 @@ import java.util.Date
 import java.text.SimpleDateFormat
 
 object SplitCSVOnTableColumns {
-  val log = LoggerFactory.getLogger(this.getClass.getName)
+  /*val log = LoggerFactory.getLogger(this.getClass.getName)
   val DATE_FORMAT = "yyyy-MM-dd hh:mm:ss"
   def main(args: Array[String]): Unit = {
     val outPath = "/Users/gkumargaur/tmp/tmp"
@@ -51,5 +51,5 @@ object SplitCSVOnTableColumns {
       .format("parquet")
       .mode(SaveMode.Overwrite)
     .save(outPath)
-  }
+  }*/
 }
