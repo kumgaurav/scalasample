@@ -1,22 +1,24 @@
 package com.kumargaurav.avro
 
-import org.apache.spark.sql.avro.SchemaConverters
 import scala.reflect.runtime.{universe => ru}
-import org.apache.spark.sql.{Row, SaveMode, SparkSession}
+import org.apache.spark.sql.{DataFrame, Row, SaveMode, SparkSession}
 import org.apache.avro.Schema
 import org.apache.spark.SparkConf
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{DataTypes, StructType}
 import org.slf4j.LoggerFactory
-import com.google.cloud.spark.bigquery._
 import com.google.auth.oauth2.AccessToken
 import com.kumargaurav.MiscUtil
-import org.apache.spark.sql.functions.current_date
+import org.apache.spark.sql.functions.{col, current_timestamp, from_unixtime}
+import org.json4s.FieldSerializer.{renameFrom, renameTo}
 import org.json4s._
 import org.json4s.jackson.JsonMethods._
 
+import scala.collection.mutable
+
 object AvroToBigQueryTable {
   val log = LoggerFactory.getLogger(this.getClass)
-
+  case class Fields(name : String, _type:Any )
+  case class AvroMessage(_type:String, name : String, namespace : String,fields:List[Fields] )
   def main(args: Array[String]): Unit = {
     val projectId = "itd-aia-dp"
     val datalakeprojectId = "itd-aia-datalake"
@@ -40,9 +42,23 @@ object AvroToBigQueryTable {
     println("schemaText -> " + schemaText)
     val json = parse(schemaText).transformField { case JField(k, v) => JField(k.toLowerCase, v) }
     // Converting from JOjbect to plain object
-    implicit val formats = DefaultFormats
+    val avroSerializer = FieldSerializer[AvroMessage](
+      renameTo("type", "_type"),renameFrom("type", "_type"))
+    val fieldsSer = FieldSerializer[Fields](
+      renameTo("type", "_type"),renameFrom("type", "_type"))
+    implicit val formats = DefaultFormats.strict + avroSerializer + fieldsSer
+    val avroMessage = parse(schemaText).extract[AvroMessage]
     val tableName = (json \ "name").extract[String]
     println("tableName -> "+tableName)
+    var dateCols = mutable.MutableList[String]()
+    //println("logicalType -> "+avroMessage._type)
+    for (obj <- avroMessage.fields.filter(_._type.getClass.getName.contains("scala.collection.immutable"))) {
+      val typeLst = obj._type.asInstanceOf[List[Any]]
+      val typeMap = if(typeLst.size == 2 && typeLst(1).getClass.getName.contains("scala.collection.immutable.Map")) typeLst(1).asInstanceOf[Map[String, String]] else Map[String, String]()
+      if(typeMap.getOrElse("logicalType","").toString == "date"){
+        dateCols += obj.name
+      }
+    }
     val tableNameForWrite = datalakeprojectId + "." + outSchemaName + "." + tableName
     println("tableNameForWrite -> "+tableNameForWrite)
     val schema = new Schema.Parser().parse(schemaText)
@@ -54,7 +70,9 @@ object AvroToBigQueryTable {
     val structure = objMirror.reflectMethod(method)(schema).asInstanceOf[org.apache.spark.sql.avro.SchemaConverters.SchemaType]
     val sqlSchema = structure.dataType.asInstanceOf[StructType]
     val empty_df = spark.createDataFrame(spark.sparkContext.emptyRDD[Row], sqlSchema)
-    val finaldf = empty_df.withColumn("record_ingestion_date",current_date())
+    val tempdf = empty_df.withColumn("record_ingestion_time",current_timestamp())
+    println("dateCols -> "+dateCols)
+    val finaldf = bulkColumnLongToDate(tempdf, dateCols)
     finaldf.printSchema()
     finaldf.write.format("bigquery")
       .mode(SaveMode.Overwrite)
@@ -66,5 +84,7 @@ object AvroToBigQueryTable {
       .save(tableNameForWrite)
     spark.stop()
   }
-
+  def bulkColumnLongToDate(df:DataFrame, cols: Seq[String] = Nil): DataFrame = {
+    cols.foldLeft(df)((acc, c) => acc.withColumn(c, from_unixtime(col(c),"yyyy-MM-dd").cast(DataTypes.DateType)))
+  }
 }
