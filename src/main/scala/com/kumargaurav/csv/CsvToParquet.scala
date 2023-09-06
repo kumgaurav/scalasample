@@ -11,7 +11,7 @@ object CsvToParquet {
       .set("materializationProject","itd-aia-dp")
       .setMaster("local[*]")
     implicit val spark = SparkSession.builder.config(sparkConf).getOrCreate
-    val schemaPath = if(args.length>0 && args(0) != "" ) args(0) else "/Users/gkumargaur/Desktop/zinc.csv"
+    val schemaPath = if(args.length>0 && args(0) != "" ) args(0) else "/Users/gkumargaur/Desktop/gsi_contract_data.csv"
     log.info("reading file : "+schemaPath)
     val  tbldf = spark.read.option("quote", "\"").
       option("delimiter", ",").
@@ -19,8 +19,9 @@ object CsvToParquet {
       option("escape", "\\").
       option("nullValue", "\\N").
       option("header", true).csv(schemaPath)
-    tbldf.show(100)
-    tbldf.write.mode(SaveMode.Overwrite).parquet("/Users/gkumargaur/tmp/zinc/")
+    val tblmdf  = tbldf.columns.foldLeft(tbldf)((curr, n) => curr.withColumnRenamed(n, n.replaceAll("\\s", "_").toLowerCase))
+    tblmdf.show(100)
+    tblmdf.write.mode(SaveMode.Overwrite).parquet("/Users/gkumargaur/tmp/zinc/")
   }
 
 }
