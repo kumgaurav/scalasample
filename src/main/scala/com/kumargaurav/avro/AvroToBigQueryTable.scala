@@ -60,7 +60,22 @@ object AvroToBigQueryTable {
       val empty_df = spark.createDataFrame(spark.sparkContext.emptyRDD[Row], sqlSchema)
       val tempdf = empty_df.withColumn("record_ingestion_time", current_timestamp())
       println("dateCols -> " + dateCols)
-      val finaldf = bulkColumnLongToDate(tempdf, dateCols)
+      var finaldf = bulkColumnLongToDate(tempdf, dateCols)
+      // Check if the DataFrame is empty and add a dummy row if it is
+      if (finaldf.isEmpty) {
+        val dummyRow = finaldf.schema.fields.map(_.dataType match {
+          case DataTypes.StringType => "dummy"
+          case DataTypes.IntegerType => 0
+          case DataTypes.LongType => 0L
+          case DataTypes.DoubleType => 0.0
+          case DataTypes.DateType => java.sql.Date.valueOf("1970-01-01")
+          case DataTypes.TimestampType => new java.sql.Timestamp(0L)
+          case _ => null
+        })
+
+        val dummyDF = spark.createDataFrame(spark.sparkContext.parallelize(Seq(Row(dummyRow: _*))), finaldf.schema)
+        finaldf = finaldf.union(dummyDF)
+      }
       finaldf.printSchema()
       finaldf.show()
       finaldf.write.format("bigquery")
