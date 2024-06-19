@@ -24,6 +24,7 @@ object AvroToBigQueryTable {
     val datalakeprojectId = "itd-aia-datalake"
     val outSchemaName = "solifi_landing"
     val staging_bucket: String = if (args.length > 0 && args(0) != "") args(0) else "gs://itd-aia-de-dproc-staging/solifi/ls_blended_inc_bi_tax_table-value.avsc" //ls_blended_inc_bi_tax_table-value.avsc,ls_billing_nf-value.avsc
+    val cluster_column: String = if (args.length > 1 && args(1) != "") args(1) else "id"
     val gcsBucket: String = staging_bucket.substring(staging_bucket.indexOf("gs://") + 5, staging_bucket.lastIndexOf('/'))
     println("gcsBucket -> " + gcsBucket)
     val schemaPath = staging_bucket
@@ -61,13 +62,14 @@ object AvroToBigQueryTable {
       println("dateCols -> " + dateCols)
       val finaldf = bulkColumnLongToDate(tempdf, dateCols)
       finaldf.printSchema()
+      finaldf.show()
       finaldf.write.format("bigquery")
         .mode(SaveMode.Overwrite)
         .option("writeMethod", "direct")
         .option("temporaryGcsBucket", gcsBucket)
         .option("parentProject", projectId)
         .option("createDisposition", "CREATE_IF_NEEDED")
-        .option("clusteredFields", "id")
+        .option("clusteredFields", cluster_column)
         .save(tableNameForWrite)
     }catch {
       case e: Exception =>
